@@ -10,6 +10,7 @@ from mmap import mmap
 import pickle
 import time
 from rdma.tools import clock_monotonic
+from rdma.vtools import BufferPool
 
 ip_port = 4444
 tx_depth = 100
@@ -34,6 +35,7 @@ class Endpoint(object):
         self.mem = mmap(-1, sz)
         self.mr = self.pd.mr(self.mem,
                              ibv.IBV_ACCESS_LOCAL_WRITE|ibv.IBV_ACCESS_REMOTE_WRITE)
+        self.pool = BufferPool(self.pd,2*16,256+40)
 
     def __enter__(self):
         return self;
@@ -49,7 +51,7 @@ class Endpoint(object):
         self.peerinfo = peerinfo
         self.qp.establish(self.path,ibv.IBV_ACCESS_REMOTE_WRITE);
 
-    def rdma(self):
+    def write(self):
         swr = ibv.send_wr(wr_id=0,
                           remote_addr=self.peerinfo.addr,
                           rkey=self.peerinfo.rkey,
@@ -80,27 +82,39 @@ class Endpoint(object):
             raise rdma.RDMAError("CQ timed out");
 
         tcomp = clock_monotonic()
-
+    def send(self,buf):
+        buf_idx = self.pool.pop();
+        self.pool.copy_to(buf,buf_idx);
+        self.qp.post_send(self.pool.make_send_wr(buf_idx,len(buf),self.path));
+    
+    def recv(self):
+        self.pool.post_recvs(self.qp,1)
 def run_server(dev):
     database = {}
 
     def execute(command):
         command = command.split(' ', 1)
         if command[0] in 'GET get Get':
-            print command[1]+' :',database.get(command[1])
-        elif command[0] in 'PUT put Put':
+            res = database.get(command[1])
+            print command[1]+' :', res
+            return str(res) 
+        elif command[0] in 'PUT put Put SET set Set':
             command = command[1].split(' ', 1)
             if len(command)==1:
                 print 'No value set'
+                return 'FAIL'
             else:
                 database[command[0]] = command[1]
                 print command[0]+' : '+command[1]
-        elif command[0] in 'DEL del Del':
+                return 'SUCCESS'
+        elif command[0] in 'DEL del Del DELETE delete Delete':
             database.pop(command[1], None)
             print command[1]+' : None'
+            return 'SUCCESS'
             
         else:
             print 'Wrong command'
+            return 'FAIL'
 
         #print database
 
@@ -148,7 +162,9 @@ def run_server(dev):
                     end.mem.seek(0)
                     str_received = end.mem.readline().split('\0', 1)[0]
                     print 'Received: ' + str_received
-                    execute(str_received)
+                    str_response = execute(str_received)
+                    end.send(str_response)
+
 
                 s.shutdown(socket.SHUT_WR);
                 s.recv(1024);
@@ -192,9 +208,11 @@ def run_client(hostname,dev):
                 str_to_send = raw_input()
                 end.mem.seek(0)
                 end.mem.write(str_to_send+'\0')
-                end.rdma()
+                end.write()
                 sock.send("Sent");
                 print 'Sent: ' + str_to_send
+                end.recv()
+                end.pool.
 
             sock.shutdown(socket.SHUT_WR);
             sock.recv(1024);
