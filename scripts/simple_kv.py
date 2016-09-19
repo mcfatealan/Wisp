@@ -134,7 +134,6 @@ def run_server(dev):
             buf = s.recv(1024)
             peerinfo = pickle.loads(buf)
 
-            endPointStartTime = time.time();
             with Endpoint(peerinfo.size, dev) as end:
                 with rdma.get_gmp_mad(end.ctx.end_port,verbs=end.ctx) as umad:
                     end.path = peerinfo.path;
@@ -142,84 +141,91 @@ def run_server(dev):
                     rdma.path.fill_path(end.qp,end.path);
                     rdma.path.resolve_path(umad,end.path);
 
-                s.send(pickle.dumps(infotype(path=end.path,
-                                             addr=end.mr.addr,
-                                             rkey=end.mr.rkey,
-                                             size=None,
-                                             iters=None)))
+                    s.send(pickle.dumps(infotype(path=end.path,
+                                                 addr=end.mr.addr,
+                                                 rkey=end.mr.rkey,
+                                                 size=None,
+                                                 iters=None)))
 
-                print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
-                    end.path,peerinfo.addr,peerinfo.rkey);
+                    print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
+                        end.path,peerinfo.addr,peerinfo.rkey);
 
-                end.connect(peerinfo)
+                    end.connect(peerinfo)
 
                     # Synchronize the transition to RTS
-                s.send("ready");
-                s.recv(1024);
-                    
-                while True:
+                    s.send("ready");
                     s.recv(1024);
-                    end.mem.seek(0)
-                    str_received = end.mem.readline().split('\0', 1)[0]
-                    print 'Received: ' + str_received
-                    str_response = execute(str_received)
-                    end.send(str_response)
+                        
+                    while True:
+                        #s.recv(1024);
+                        #print repr(end.mem.read(30))
+                        while True:
+                            cond = (end.mem.read(1)!='\x00')
+                            end.mem.seek(-1,1)
+                            if cond:
+                                break
+                        
+                        raw_str = end.mem.readline()
+                        str_received = raw_str.split('\n', 1)[0]
+                        print 'Received: ' + str_received
+                        str_response = execute(str_received)
+                        #umad.sendto(str_response,peerinfo.path)
 
 
-                s.shutdown(socket.SHUT_WR);
-                s.recv(1024);
+                    s.shutdown(socket.SHUT_WR);
+                    s.recv(1024);
 
                 
 def run_client(hostname,dev):
     print 'client running..'
     with Endpoint(memsize, dev) as end:
-        ret = socket.getaddrinfo(hostname,str(ip_port),0,
-                                 socket.SOCK_STREAM);
-        ret = ret[0];
-        with contextlib.closing(socket.socket(ret[0],ret[1])) as sock:
-            sock.connect(ret[4]);
+        with rdma.get_gmp_mad(end.ctx.end_port,verbs=end.ctx) as umad:
+            ret = socket.getaddrinfo(hostname,str(ip_port),0,
+                                     socket.SOCK_STREAM);
+            ret = ret[0];
+            with contextlib.closing(socket.socket(ret[0],ret[1])) as sock:
+                sock.connect(ret[4]);
 
-            path = rdma.path.IBPath(dev,SGID=end.ctx.end_port.default_gid);
-            rdma.path.fill_path(end.qp,path,max_rd_atomic=0);
-            path.reverse(for_reply=False);
+                path = rdma.path.IBPath(dev,SGID=end.ctx.end_port.default_gid);
+                rdma.path.fill_path(end.qp,path,max_rd_atomic=0);
+                path.reverse(for_reply=False);
 
-            sock.send(pickle.dumps(infotype(path=path,
-                                            addr=end.mr.addr,
-                                            rkey=end.mr.rkey,
-                                            size=memsize,
-                                            iters=1)))
-            buf = sock.recv(1024)
-            peerinfo = pickle.loads(buf)
+                sock.send(pickle.dumps(infotype(path=path,
+                                                addr=end.mr.addr,
+                                                rkey=end.mr.rkey,
+                                                size=memsize,
+                                                iters=1)))
+                buf = sock.recv(1024)
+                peerinfo = pickle.loads(buf)
 
-            end.path = peerinfo.path;
-            end.path.reverse(for_reply=False);
-            end.path.end_port = end.ctx.end_port;
+                end.path = peerinfo.path;
+                end.path.reverse(for_reply=False);
+                end.path.end_port = end.ctx.end_port;
 
-            print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
-                end.path,peerinfo.addr,peerinfo.rkey);
+                print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
+                    end.path,peerinfo.addr,peerinfo.rkey);
 
-            end.connect(peerinfo)
-            
-            # Synchronize the transition to RTS
-            sock.send("Ready");
-            sock.recv(1024);
+                end.connect(peerinfo)
+                
+                # Synchronize the transition to RTS
+                sock.send("Ready");
+                sock.recv(1024);
 
-            while True:
-                str_to_send = raw_input()
-                end.mem.seek(0)
-                end.mem.write(str_to_send+'\0')
-                end.write()
-                sock.send("Sent");
-                print 'Sent: ' + str_to_send
-                end.recv()
-                end.pool.
+                while True:
+                    str_to_send = raw_input()
+                    end.mem.write(str_to_send+'\n')
+                    end.write()
+                    #sock.send("Sent");
+                    print 'Sent: ' + str_to_send
+                    #buf,path = umad.recvfrom(None);
+                    #print buf
+                    
+                sock.shutdown(socket.SHUT_WR);
+                sock.recv(1024);
 
-            sock.shutdown(socket.SHUT_WR);
-            sock.recv(1024);
 
-
-            print "---client end"
-        print "---sock close"
+                print "---client end"
+            print "---sock close"
     print "--- endpoint close"
 
 def main():
