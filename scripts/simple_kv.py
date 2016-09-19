@@ -11,6 +11,7 @@ import pickle
 import time
 from rdma.tools import clock_monotonic
 from rdma.vtools import BufferPool
+import copy
 
 ip_port = 4444
 tx_depth = 100
@@ -35,7 +36,7 @@ class Endpoint(object):
         self.mem = mmap(-1, sz)
         self.mr = self.pd.mr(self.mem,
                              ibv.IBV_ACCESS_LOCAL_WRITE|ibv.IBV_ACCESS_REMOTE_WRITE)
-        self.pool = BufferPool(self.pd,2*16,256+40)
+        self.pool = BufferPool(self.pd,256,256*40)
 
     def __enter__(self):
         return self;
@@ -135,6 +136,8 @@ def run_server(dev):
             peerinfo = pickle.loads(buf)
 
             with Endpoint(peerinfo.size, dev) as end:
+                back_path = copy.deepcopy(peerinfo.path)
+                back_path.reverse()
                 with rdma.get_gmp_mad(end.ctx.end_port,verbs=end.ctx) as umad:
                     end.path = peerinfo.path;
                     end.path.end_port = end.ctx.end_port;
@@ -169,8 +172,8 @@ def run_server(dev):
                         str_received = raw_str.split('\n', 1)[0]
                         print 'Received: ' + str_received
                         str_response = execute(str_received)
-                        #umad.sendto(str_response,peerinfo.path)
-
+                        #umad.sendto(str_response,peerinfo.path.reverse(for_reply=True))
+                        end.send(str_response)
 
                     s.shutdown(socket.SHUT_WR);
                     s.recv(1024);
@@ -188,7 +191,7 @@ def run_client(hostname,dev):
 
                 path = rdma.path.IBPath(dev,SGID=end.ctx.end_port.default_gid);
                 rdma.path.fill_path(end.qp,path,max_rd_atomic=0);
-                path.reverse(for_reply=False);
+                path.reverse(for_reply=True);
 
                 sock.send(pickle.dumps(infotype(path=path,
                                                 addr=end.mr.addr,
@@ -199,7 +202,7 @@ def run_client(hostname,dev):
                 peerinfo = pickle.loads(buf)
 
                 end.path = peerinfo.path;
-                end.path.reverse(for_reply=False);
+                end.path.reverse(for_reply=True);
                 end.path.end_port = end.ctx.end_port;
 
                 print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
@@ -211,14 +214,19 @@ def run_client(hostname,dev):
                 sock.send("Ready");
                 sock.recv(1024);
 
+                count = 0
                 while True:
                     str_to_send = raw_input()
+                    end.recv()
                     end.mem.write(str_to_send+'\n')
                     end.write()
                     #sock.send("Sent");
                     print 'Sent: ' + str_to_send
-                    #buf,path = umad.recvfrom(None);
-                    #print buf
+                    while end.pool.copy_from(end.pool.count-1-count)[0]==0:
+                        pass
+                    print end.pool.copy_from(end.pool.count-1-count)
+
+                    count += 1
                     
                 sock.shutdown(socket.SHUT_WR);
                 sock.recv(1024);
