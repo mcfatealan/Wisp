@@ -1,24 +1,55 @@
-import sys
 import rdma
 import rdma.ibverbs as ibv
 import rdma.IBA as IBA
-from collections import namedtuple
+import rdma.vtools
+from rdma.tools import clock_monotonic
+from rdma.vtools import BufferPool
+import sys
 import socket
 import contextlib
-import rdma.vtools
 from mmap import mmap
 import pickle
 import time
-from rdma.tools import clock_monotonic
-from rdma.vtools import BufferPool
 import copy
+import random
+import string
+from collections import namedtuple
+from collections import deque
+
+display_mode = False
 
 ip_port = 4444
 tx_depth = 100
-memsize = 1024
+memsize = 1024*100
+buffersize = 256
+buffernum = 8
+keysize = 10
+payloadsize = 100
 
 infotype = namedtuple('infotype', 'path addr rkey size iters')
 
+def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+def print_info(*messages):
+    if display_mode:
+        for message in enumerate(messages):
+            print message
+        
+class BufferPoolEnhanced(BufferPool):
+    def recharge(self):
+        self._buffers = deque(xrange(self.count),self.count);
+        return self.reset_count()
+    
+    def reset_count(self):
+        return self.count-1;
+    
+    def count_minus(self,count):
+        res = count - 1
+        if(res<0):
+            res = self.recharge()
+        return res
+    
 class Endpoint(object):
     ctx = None;
     pd = None;
@@ -36,7 +67,7 @@ class Endpoint(object):
         self.mem = mmap(-1, sz)
         self.mr = self.pd.mr(self.mem,
                              ibv.IBV_ACCESS_LOCAL_WRITE|ibv.IBV_ACCESS_REMOTE_WRITE)
-        self.pool = BufferPool(self.pd,256,256*40)
+        self.pool = BufferPoolEnhanced(self.pd,buffernum,buffersize*buffernum)
 
     def __enter__(self):
         return self;
@@ -90,6 +121,7 @@ class Endpoint(object):
     
     def recv(self):
         self.pool.post_recvs(self.qp,1)
+        
 def run_server(dev):
     database = {}
 
@@ -97,24 +129,24 @@ def run_server(dev):
         command = command.split(' ', 1)
         if command[0] in 'GET get Get':
             res = database.get(command[1])
-            print command[1]+' :', res
+            print_info(command[1]+' :', res)
             return str(res) 
         elif command[0] in 'PUT put Put SET set Set':
             command = command[1].split(' ', 1)
             if len(command)==1:
-                print 'No value set'
+                print_info('No value set')
                 return 'FAIL'
             else:
                 database[command[0]] = command[1]
-                print command[0]+' : '+command[1]
+                print_info(command[0]+' : '+command[1])
                 return 'SUCCESS'
         elif command[0] in 'DEL del Del DELETE delete Delete':
             database.pop(command[1], None)
-            print command[1]+' : None'
+            print_info(command[1]+' : None')
             return 'SUCCESS'
             
         else:
-            print 'Wrong command'
+            print_info( 'Wrong command')
             return 'FAIL'
 
         #print database
@@ -159,9 +191,9 @@ def run_server(dev):
                     s.send("ready");
                     s.recv(1024);
                         
+                    buffer_count = end.pool.reset_count()
                     while True:
                         #s.recv(1024);
-                        #print repr(end.mem.read(30))
                         while True:
                             cond = (end.mem.read(1)!='\x00')
                             end.mem.seek(-1,1)
@@ -169,11 +201,14 @@ def run_server(dev):
                                 break
                         
                         raw_str = end.mem.readline()
-                        str_received = raw_str.split('\n', 1)[0]
-                        print 'Received: ' + str_received
-                        str_response = execute(str_received)
+                        request = raw_str.split('\n', 1)[0]
+
+                        print_info('Received: ' + request)
+                        response = execute(request)
                         #umad.sendto(str_response,peerinfo.path.reverse(for_reply=True))
-                        end.send(str_response)
+                        end.send(response+'\n')
+
+                        buffer_count = end.pool.count_minus(buffer_count) 
 
                     s.shutdown(socket.SHUT_WR);
                     s.recv(1024);
@@ -214,20 +249,47 @@ def run_client(hostname,dev):
                 sock.send("Ready");
                 sock.recv(1024);
 
-                count = 0
+                start_time = time.time()
+                buffer_count = end.pool.reset_count()
+                response = [0]
+                request_count = 0
                 while True:
-                    str_to_send = raw_input()
-                    end.recv()
-                    end.mem.write(str_to_send+'\n')
-                    end.write()
-                    #sock.send("Sent");
-                    print 'Sent: ' + str_to_send
-                    while end.pool.copy_from(end.pool.count-1-count)[0]==0:
-                        pass
-                    print end.pool.copy_from(end.pool.count-1-count)
+                    #write request
+                    #request = raw_input()
+                    op = random.randint(0,1)
+                    if op==0:
+                        request = 'get '+id_generator(3,'0123456789')
+                    elif op==1:
+                        request = 'put '+id_generator(3,'0123456789')+' '+id_generator(128,'0123456789')
 
-                    count += 1
+                    end.pool.copy_to('\0',buffer_count)
+
+                    end.recv()
+                    end.mem.write(request+'\n')
+                    end.write()
+                
+                    request_count +=1
+                    if request_count>200:
+                        break
                     
+                    #sock.send("Sent");
+
+                    print_info('Sent: ' + request)
+                    
+                    #poll response
+                    while True:
+                        response = end.pool.copy_from(buffer_count)
+                        if response[0]!=0:
+                            break
+                        
+                    print_info(response.split('\n', 1)[0])
+                    #for i in xrange(end.pool.count):
+                    #    print i,end.pool.copy_from(i).split('\n', 1)[0]
+                    
+                    buffer_count = end.pool.count_minus(buffer_count) 
+                    
+                print("--- %s seconds, %s requests ---" % (time.time() - start_time,request_count))
+                
                 sock.shutdown(socket.SHUT_WR);
                 sock.recv(1024);
 
@@ -243,7 +305,6 @@ def main():
     '''
     
     if len(sys.argv) ==1:
-        print 'parameter not enough'
         print usage_str
         return
 
@@ -253,7 +314,6 @@ def main():
     elif sys.argv[1]=='client':
         run_client(sys.argv[2], rdma.get_end_port())
     else:
-        print 'wrong parameter: should be server or client'
         print usage_str
         return
     
