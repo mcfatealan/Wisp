@@ -15,16 +15,19 @@ import random
 import string
 from collections import namedtuple
 from collections import deque
+import cProfile
 
 display_mode = False
+profile_mode = False
 
 ip_port = 4444
-tx_depth = 100
+tx_depth = 100*100
 memsize = 1024*100
-buffersize = 256
-buffernum = 8
-keysize = 10
+buffersize = 128
+buffernum = 1024
+keysize = 3
 payloadsize = 100
+
 
 infotype = namedtuple('infotype', 'path addr rkey size iters')
 
@@ -91,29 +94,8 @@ class Endpoint(object):
                           opcode=ibv.IBV_WR_RDMA_WRITE,
                           send_flags=ibv.IBV_SEND_SIGNALED)
 
-        n = 1
-        depth = min(tx_depth, n, self.qp.max_send_wr)
+        self.qp.post_send(swr)
 
-        tpost = clock_monotonic()
-        for i in xrange(depth):
-            self.qp.post_send(swr)
-
-        completions = 0
-        posts = depth
-        for wc in self.poller.iterwc(timeout=3):
-            if wc.status != ibv.IBV_WC_SUCCESS:
-                raise ibv.WCError(wc,self.cq,obj=self.qp);
-            completions += 1
-            if posts < n:
-                self.qp.post_send(swr)
-                posts += 1
-                self.poller.wakeat = rdma.tools.clock_monotonic() + 1;
-            if completions == n:
-                break;
-        else:
-            raise rdma.RDMAError("CQ timed out");
-
-        tcomp = clock_monotonic()
     def send(self,buf):
         buf_idx = self.pool.pop();
         self.pool.copy_to(buf,buf_idx);
@@ -122,6 +104,9 @@ class Endpoint(object):
     def recv(self):
         self.pool.post_recvs(self.qp,1)
         
+    def poll_wc(self):
+        wc = self.cq.poll()
+            
 def run_server(dev):
     database = {}
 
@@ -176,126 +161,162 @@ def run_server(dev):
                     rdma.path.fill_path(end.qp,end.path);
                     rdma.path.resolve_path(umad,end.path);
 
-                    s.send(pickle.dumps(infotype(path=end.path,
-                                                 addr=end.mr.addr,
-                                                 rkey=end.mr.rkey,
-                                                 size=None,
-                                                 iters=None)))
-
-                    print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
-                        end.path,peerinfo.addr,peerinfo.rkey);
-
-                    end.connect(peerinfo)
-
-                    # Synchronize the transition to RTS
-                    s.send("ready");
-                    s.recv(1024);
-                        
-                    buffer_count = end.pool.reset_count()
-                    while True:
-                        #s.recv(1024);
-                        while True:
-                            cond = (end.mem.read(1)!='\x00')
-                            end.mem.seek(-1,1)
-                            if cond:
-                                break
-                        
-                        raw_str = end.mem.readline()
-                        request = raw_str.split('\n', 1)[0]
-
-                        print_info('Received: ' + request)
-                        response = execute(request)
-                        #umad.sendto(str_response,peerinfo.path.reverse(for_reply=True))
-                        end.send(response+'\n')
-
-                        buffer_count = end.pool.count_minus(buffer_count) 
-
-                    s.shutdown(socket.SHUT_WR);
-                    s.recv(1024);
-
-                
-def run_client(hostname,dev):
-    print 'client running..'
-    with Endpoint(memsize, dev) as end:
-        with rdma.get_gmp_mad(end.ctx.end_port,verbs=end.ctx) as umad:
-            ret = socket.getaddrinfo(hostname,str(ip_port),0,
-                                     socket.SOCK_STREAM);
-            ret = ret[0];
-            with contextlib.closing(socket.socket(ret[0],ret[1])) as sock:
-                sock.connect(ret[4]);
-
-                path = rdma.path.IBPath(dev,SGID=end.ctx.end_port.default_gid);
-                rdma.path.fill_path(end.qp,path,max_rd_atomic=0);
-                path.reverse(for_reply=True);
-
-                sock.send(pickle.dumps(infotype(path=path,
-                                                addr=end.mr.addr,
-                                                rkey=end.mr.rkey,
-                                                size=memsize,
-                                                iters=1)))
-                buf = sock.recv(1024)
-                peerinfo = pickle.loads(buf)
-
-                end.path = peerinfo.path;
-                end.path.reverse(for_reply=True);
-                end.path.end_port = end.ctx.end_port;
+                s.send(pickle.dumps(infotype(path=end.path,
+                                             addr=end.mr.addr,
+                                             rkey=end.mr.rkey,
+                                             size=None,
+                                             iters=None)))
 
                 print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
                     end.path,peerinfo.addr,peerinfo.rkey);
 
                 end.connect(peerinfo)
-                
-                # Synchronize the transition to RTS
-                sock.send("Ready");
-                sock.recv(1024);
 
-                start_time = time.time()
+                # Synchronize the transition to RTS
+                s.send("ready");
+                s.recv(1024);
+                    
                 buffer_count = end.pool.reset_count()
-                response = [0]
                 request_count = 0
                 while True:
-                    #write request
-                    #request = raw_input()
-                    op = random.randint(0,1)
-                    if op==0:
-                        request = 'get '+id_generator(3,'0123456789')
-                    elif op==1:
-                        request = 'put '+id_generator(3,'0123456789')+' '+id_generator(128,'0123456789')
+                    #s.recv(1024);
+                    while True:
+                        cond = (end.mem.read(1)!='\x00')
+                        end.mem.seek(-1,1)
+                        if cond:
+                            break
+                    
+                    raw_str = end.mem.readline()
+                    request = raw_str.split('\n', 1)[0]
 
-                    end.pool.copy_to('\0',buffer_count)
+                    print_info('Received: ' + request)
+                    response = execute(request)
+                    #umad.sendto(str_response,peerinfo.path.reverse(for_reply=True))
+                    end.send(str(len(response)+1).zfill(3)+response+'\n')
 
-                    end.recv()
-                    end.mem.write(request+'\n')
-                    end.write()
-                
+                    buffer_count = end.pool.count_minus(buffer_count) 
+
                     request_count +=1
-                    if request_count>200:
+                    print_info(request_count)
+                    if(request_count>1000):
                         break
                     
-                    #sock.send("Sent");
+                    if memsize-end.mem.tell()<1024:
+                        end.mem.seek(0)
 
-                    print_info('Sent: ' + request)
-                    
-                    #poll response
-                    while True:
-                        response = end.pool.copy_from(buffer_count)
-                        if response[0]!=0:
-                            break
-                        
-                    print_info(response.split('\n', 1)[0])
-                    #for i in xrange(end.pool.count):
-                    #    print i,end.pool.copy_from(i).split('\n', 1)[0]
-                    
-                    buffer_count = end.pool.count_minus(buffer_count) 
-                    
-                print("--- %s seconds, %s requests ---" % (time.time() - start_time,request_count))
+
+                s.shutdown(socket.SHUT_WR);
+                s.recv(1024);
+
                 
-                sock.shutdown(socket.SHUT_WR);
-                sock.recv(1024);
+def run_client(hostname,dev):
+    def generate_payload():
+        op = random.randint(0,1)
+        request=''
+        if op==0:
+            request = 'get '+id_generator(keysize,'0123456789')
+        elif op==1:
+            request = 'put '+id_generator(keysize,'0123456789')+' '+"x" * payloadsize
+        return request
+
+    def poll_response():
+        response = ''
+        check_bit = 0
+        while True:
+            message_length = end.pool.copy_from(buffer_count,length=3)
+            if message_length[0] != 0:
+                response = end.pool.copy_from(buffer_count,length=int(message_length))
+                break
+            else:
+                pass
+                #for i in xrange(end.pool.count-20,end.pool.count):
+                 #   print i,end.pool.copy_from(i).split('\n', 1)[0]
+
+        return response
+    
+    print 'client running..'
+    with Endpoint(memsize, dev) as end:
+        ret = socket.getaddrinfo(hostname,str(ip_port),0,
+                                 socket.SOCK_STREAM);
+        ret = ret[0];
+        with contextlib.closing(socket.socket(ret[0],ret[1])) as sock:
+            sock.connect(ret[4]);
+
+            path = rdma.path.IBPath(dev,SGID=end.ctx.end_port.default_gid);
+            rdma.path.fill_path(end.qp,path,max_rd_atomic=0);
+            path.reverse(for_reply=True);
+
+            sock.send(pickle.dumps(infotype(path=path,
+                                            addr=end.mr.addr,
+                                            rkey=end.mr.rkey,
+                                            size=memsize,
+                                            iters=1)))
+            buf = sock.recv(1024)
+            peerinfo = pickle.loads(buf)
+
+            end.path = peerinfo.path;
+            end.path.reverse(for_reply=True);
+            end.path.end_port = end.ctx.end_port;
+
+            print "path to peer %r\nMR peer raddr=%x peer rkey=%x"%(
+                end.path,peerinfo.addr,peerinfo.rkey);
+
+            end.connect(peerinfo)
+            
+            # Synchronize the transition to RTS
+            sock.send("Ready");
+            sock.recv(1024);
+
+            start_time = time.time()
+            buffer_count = end.pool.reset_count()
+            response = [0]
+            request_count = 0
+            pre_count = 0
+            while True:
+                #write request
+                #request = raw_input()
+                request = generate_payload()
+                #end.pool.copy_to('\0',buffer_count)
+
+                end.recv()
+                end.mem.write(request+'\n')
+                
+                #write_start_time = time.time()
+                end.write()
+                #print 'write_time: ',time.time()-write_start_time
+
+                request_count +=1
+                print_info(request_count)
+                if(request_count>1000):
+                    break
+                
+                pre_count += 1
+                if(pre_count<10):
+                    continue
+                
+                #sock.send("Sent");
+                print_info('Sent: ' + request)
+                
+                
+                #poll response
+                response = poll_response()
+                                    
+                #end.poll_wc()
+                print_info(response.split('\n', 1)[0])
+                buffer_count = end.pool.count_minus(buffer_count) 
+
+                if memsize-end.mem.tell()<1024:
+                    end.mem.seek(0)
+
+                
+            print("--- %s seconds, %s requests ---" % (time.time() - start_time,request_count))
+            
+            sock.shutdown(socket.SHUT_WR);
+            sock.recv(1024);
 
 
-                print "---client end"
-            print "---sock close"
+            print "---client end"
+        print "---sock close"
     print "--- endpoint close"
 
 def main():
@@ -308,15 +329,19 @@ def main():
         print usage_str
         return
 
-
+    exec_str = ''
     if sys.argv[1]=='server':
-        run_server(rdma.get_end_port())
+        exec_str = 'run_server(rdma.get_end_port())'
     elif sys.argv[1]=='client':
-        run_client(sys.argv[2], rdma.get_end_port())
+        exec_str = 'run_client(sys.argv[2], rdma.get_end_port())'
     else:
         print usage_str
         return
     
+    if(profile_mode):
+        cProfile.run(exec_str)
+    else:
+        exec(exec_str)
 
 
 if __name__ == "__main__":
