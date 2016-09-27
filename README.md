@@ -1,6 +1,11 @@
 # Wisp
 Wisp is a simple key-value storage database specially designed for RDMA-enhanced network.
 
+##dependency
+* zeromq 4.0.5 or higher
+* Mellanox OFED v3.0-2.0.1 stack or higher
+* libcuckoo
+
 ##update
 in `scripts`, add `simple_kv`: a python-implemented key/value store service with performance test.
 This script is experimental. The test shows that the performance of `python-rdma` is not so promising.
