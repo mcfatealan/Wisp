@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string>
 #include "../ext/getoptpp/getopt_pp.h"
 #include "client.h"
 #include "server.h"
@@ -20,6 +21,11 @@ int main(int argc, char* argv[]) {
    {
        std::string server_address;
        ops >> Option('c', "client", server_address);
+       if(server_address.compare("")==0)
+       {
+            std::cout << "lacks server address" << std::endl;
+            return(-1);
+       }
        Client client(server_address);
        client.run();
    }

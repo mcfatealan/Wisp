@@ -1,17 +1,17 @@
 CC=g++
-CFLAGS=-c -Wall
-LDFLAGS=
+CFLAGS=-c -Wall -std=c++11 
+LDFLAGS=-lcityhash -lzmq
 SOURCES=src/main.cpp src/server.cpp src/client.cpp ext/getoptpp/getopt_pp.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 EXECUTABLE=wisp
 
-all: $(SOURCES) $(EXECUTABLE) cleanup
+all: $(SOURCES) $(EXECUTABLE) clean
     
 $(EXECUTABLE): $(OBJECTS) 
-	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
+	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
 
 .cpp.o:
 	$(CC) $(CFLAGS) $< -o $@
 
-cleanup:
+clean:
 	rm $(OBJECTS)
