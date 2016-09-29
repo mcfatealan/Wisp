@@ -1,5 +1,5 @@
 # Wisp
-Wisp is a simple key-value storage database specially designed for RDMA-enhanced network.
+Wisp is a simple key-value store service specially designed for RDMA-enhanced network.
 
 ##dependency
 * zeromq 4.0.5 or higher
