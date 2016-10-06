@@ -66,8 +66,13 @@ std::string Server::execute_request(std::string request)
 
 KV_ERR Server::put(std::string key, std::string value)
 {
-    Table.insert(key,value);
-    return ERR_OK;
+    if(Table.insert(key,value))
+        return ERR_OK;
+    else
+        if(Table.update(key,value))
+            return ERR_OK;
+        else
+            return ERR_FAIL;
 }
 
 KV_ERR Server::get(std::string key, std::string &value)
@@ -97,6 +102,11 @@ bool Server::parse_request(std::string request,OP &op,std::string &arg1, std::st
     else if (request.substr(0,3).compare("get")==0)
     {
         op = OP_GET;
+        arg1 = request.substr(4,string::npos);
+    }
+    else if (request.substr(0,3).compare("del")==0)
+    {
+        op = OP_DEL;
         arg1 = request.substr(4,string::npos);
     }
     return true;

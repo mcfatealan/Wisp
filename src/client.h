@@ -1,6 +1,11 @@
 #include <string>
 #include <iostream>
+#include <cmath>
+#include <stdio.h>
+#include <stdlib.h>
 #include <zmq.hpp>
+#include "util.h"
+#include "../ext/rdma_lib/rdma_msg.h"
 
 class Client
 {
@@ -26,5 +31,6 @@ public:
     }
 
     void run();
+    void run_perftest(int keysize, int payloadsize);
 
 };

@@ -29,6 +29,36 @@ int main(int argc, char* argv[]) {
        Client client(server_address);
        client.run();
    }
+   else if (ops >> OptionPresent('p',"client_perf"))
+   {
+       std::string server_address, key_size, payload_size;
+       int ks,ps;
+       ops >> Option('p', "client_perf", server_address)
+           >> Option("key_size", key_size)
+           >> Option("payload_size", payload_size);
+       try{
+           ks = std::stoi( key_size );
+           ps = std::stoi( payload_size );
+       }
+       catch (std::invalid_argument)
+       {
+           std::cout << "key_size or payload_size invalid" << std::endl;
+           return(-1);
+       }
+       catch (std::out_of_range)
+       {
+           std::cout << "key_size or payload_size invalid" << std::endl;
+           return(-1);
+       }
+
+       if(server_address.compare("")==0)
+       {
+           std::cout << "lacks server address" << std::endl;
+           return(-1);
+       }
+       Client client(server_address);
+       client.run_perftest(ks,ps);
+   }
 
 
    return 0;
@@ -36,5 +66,5 @@ int main(int argc, char* argv[]) {
 
 void show_usage()
 {
-    std::cout << "Usage:\n\t-h\t\t\t help\n\t-s\t\t\t run as server\n\t-c [SERVER_ADDRESS]\t run as client\n" << std::endl;
+    std::cout << "Usage:\n\t-h\t\t\t help\n\t-s\t\t\t run as server\n\t-c [SERVER_ADDRESS]\t run as client\n\t-p [SERVER_ADDRESS] --key_size 3 --payload_size 100\t run as client_perf\n" << std::endl;
 }
