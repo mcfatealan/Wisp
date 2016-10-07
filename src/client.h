@@ -5,7 +5,8 @@
 #include <stdlib.h>
 #include <zmq.hpp>
 #include "util.h"
-#include "../ext/rdma_lib/rdma_msg.h"
+#include "rdma.h"
+
 
 class Client
 {
@@ -30,7 +31,8 @@ public:
         std::cout << "finished. "<<std::endl;
     }
 
-    void run();
-    void run_perftest(int keysize, int payloadsize);
+    void run_tcp();
+    void run_rdma();
+    void run_perftest_tcp(int keysize, int payloadsize);
 
 };

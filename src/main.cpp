@@ -15,7 +15,10 @@ int main(int argc, char* argv[]) {
    else if (ops >> OptionPresent('s',"server"))
    {
        Server server;
-       server.run();
+       if (ops >> OptionPresent('t',"tcp"))
+           server.run_tcp();
+       else
+           server.run_rdma();
    }
    else if (ops >> OptionPresent('c',"client"))
    {
@@ -27,7 +30,11 @@ int main(int argc, char* argv[]) {
             return(-1);
        }
        Client client(server_address);
-       client.run();
+       if (ops >> OptionPresent('t',"tcp"))
+           client.run_tcp();
+       else
+           client.run_rdma();
+
    }
    else if (ops >> OptionPresent('p',"client_perf"))
    {
@@ -57,7 +64,7 @@ int main(int argc, char* argv[]) {
            return(-1);
        }
        Client client(server_address);
-       client.run_perftest(ks,ps);
+       client.run_perftest_tcp(ks,ps);
    }
 
 
@@ -66,5 +73,11 @@ int main(int argc, char* argv[]) {
 
 void show_usage()
 {
-    std::cout << "Usage:\n\t-h\t\t\t help\n\t-s\t\t\t run as server\n\t-c [SERVER_ADDRESS]\t run as client\n\t-p [SERVER_ADDRESS] --key_size 3 --payload_size 100\t run as client_perf\n" << std::endl;
+    std::cout << "Usage:\n"
+              <<"\t[-h]\t\t\t help\n"
+              <<"\t[-s]\t\t\t run as server\n"
+              <<"\t[-c SERVER_ADDRESS] \t run as client\n"
+              <<"\t[-p SERVER_ADDRESS] [--key_size key_size] [--payload_size payload_size]\n"
+              <<"\t    \t\t\t run as client_perf\n"
+              <<"\t[-t]\t\t\t use tcp instead of rdma\n";
 }

@@ -3,7 +3,7 @@
 #include <libcuckoo/city_hasher.hh>
 #include <zmq.hpp>
 #include "util.h"
-#include "../ext/rdma_lib/rdma_msg.h"
+#include "rdma.h"
 
 enum KV_ERR {ERR_OK, ERR_FAIL};
 enum OP {OP_PUT, OP_GET, OP_DEL};
@@ -38,5 +38,6 @@ public:
     KV_ERR get(std::string key, std::string &value);
     KV_ERR del(std::string key);
 
-    void run();
+    void run_tcp();
+    void run_rdma();
 };

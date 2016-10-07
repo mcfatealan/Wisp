@@ -1,6 +1,6 @@
 #include "client.h"
 
-void Client::run()
+void Client::run_tcp()
 {
     std::cout << "Input request.. "<< std::endl;
     while(1)
@@ -22,7 +22,7 @@ void Client::run()
     }
 
 }
-void Client::run_perftest(int keysize, int payloadsize)
+void Client::run_perftest_tcp(int keysize, int payloadsize)
 {
     auto test_size = 100000;
 
@@ -69,3 +69,38 @@ void Client::run_perftest(int keysize, int payloadsize)
     std::cout << "The qps is " << qps <<" requests/second."<<std::endl;
 }
 
+void Client::run_rdma()
+{
+
+    int id = 0;
+    char *buffer;
+    fprintf(stdout,"Client tests start with id %d\n",id);
+
+    std::vector<std::string> netDef;
+    netDef.push_back("10.0.0.100");
+    netDef.push_back("10.0.0.101");
+
+    uint64_t bufSize = 1024*1024*1024;
+    bufSize = bufSize * 4;
+    buffer = new char[bufSize];
+
+    int port = 5555;
+    int qpPerMac = 4;
+
+    RDMAQueues *rdma = bootstrapRDMA(id,port,netDef,qpPerMac,buffer,bufSize);
+    fprintf(stdout,"rdma bootstrap done\n");
+    //  RDMAClient *client = new RDMAClient(rdma,buffer);
+
+
+    fprintf(stdout,"done\n");
+    std::cout << "Input request.. "<< std::endl;
+    while(1)
+    {
+        std::cin.getline(buffer, bufSize);
+        std::cout << "Sending  " << buffer << "..." << std::endl;
+        RDMAMessage *msg = new RDMAMessage(0,2,rdma,buffer);
+
+        send(msg,buffer);
+    }
+
+}
