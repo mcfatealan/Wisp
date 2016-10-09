@@ -11,20 +11,30 @@
 class Client
 {
 private:
-    std::string server_address;
 
     zmq::context_t context = zmq::context_t(1);
     zmq::socket_t socket = zmq::socket_t(context, ZMQ_REQ);
 
+    std::string clientAddr;
+    std::string serverAddr;
+
 public:
     Client(std::string sa)
     {
-        std::cout << "client running..."<<std::endl;
-        
-        server_address = sa;
+        serverAddr = sa;
+        clientAddr =gethostname();
 
-        std::cout << "connecting "<< server_address <<"..."<<std::endl;
-        socket.connect ("tcp://"+server_address+":3994");
+        std::cout << "client running on "<<clientAddr<<"..."<<std::endl;
+
+
+        std::cout << "connecting "<< serverAddr <<"..."<<std::endl;
+        socket.connect ("tcp://"+serverAddr+":3994");
+
+        //send ip addr
+        zmq::message_t request (32);
+        memcpy (request.data (), clientAddr.c_str(), 32);
+        socket.send (request);
+
     }
     ~Client()
     {
@@ -34,5 +44,6 @@ public:
     void run_tcp();
     void run_rdma();
     void run_perftest_tcp(int keysize, int payloadsize);
+    void run_perftest_rdma(int keysize, int payloadsize);
 
 };

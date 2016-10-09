@@ -64,7 +64,11 @@ int main(int argc, char* argv[]) {
            return(-1);
        }
        Client client(server_address);
-       client.run_perftest_tcp(ks,ps);
+
+       if (ops >> OptionPresent('t',"tcp"))
+           client.run_perftest_tcp(ks,ps);
+       else
+           client.run_perftest_rdma(ks,ps);
    }
 
 

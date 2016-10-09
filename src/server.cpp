@@ -92,36 +92,41 @@ bool Server::parse_request(std::string request, OP &op, std::string &arg1, std::
 
 void Server::run_rdma() {
     int id = 1;
-    fprintf(stdout,"Client tests start with id %d\n",id);
 
     std::vector<std::string> netDef;
-    netDef.push_back("10.0.0.100");
-    netDef.push_back("10.0.0.101");
+    netDef.push_back(clientAddr);
+    netDef.push_back(serverAddr);
 
-    char *buffer;
+    char *send_buffer,*recv_buffer;
 
     uint64_t bufSize = 1024*1024*1024;
-    bufSize = bufSize * 4;
-    buffer = new char[bufSize];
+    send_buffer = new char[bufSize];
+    recv_buffer = new char[bufSize];
 
-    int port = 5555;
+    int send_port = 5556,recv_port=5555;
     int qpPerMac = 4;
 
-    RDMAQueues *rdma = bootstrapRDMA(id,port,netDef,qpPerMac,buffer,bufSize);
+    RDMAQueues *recv_rdma = bootstrapRDMA(1,recv_port,netDef,qpPerMac,recv_buffer,bufSize);
+    RDMAMessage *recv_msg = new RDMAMessage(0,2,recv_rdma,recv_buffer);
+    RDMAQueues *send_rdma = bootstrapRDMA(1,send_port,netDef,qpPerMac,send_buffer,bufSize);
+    RDMAMessage *send_msg = new RDMAMessage(0,2,send_rdma,send_buffer);
     fprintf(stdout,"rdma bootstrap done\n");
     //  RDMAClient *client = new RDMAClient(rdma,buffer);
 
-
     fprintf(stdout,"done\n");
 
+    char req_str[1024] = {0};
     while (true) {
-        RDMAMessage *msg = new RDMAMessage(0,2,rdma,buffer);
-        recv(msg);
+
+        recv(recv_msg,req_str,0);
         //  Wait for next request from client
-        std::cout << "Received " << buffer << std::endl;
+        std::cout << "Recv " << req_str << std::endl;
 
-        while(1){}
+        //  Do some 'work'
+        std::string resp_str = execute_request(std::string(req_str));
 
+        send(send_msg,resp_str.c_str());
+        std::cout << "Send "<< resp_str << std::endl;
 
     }
 }

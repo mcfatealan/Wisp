@@ -44,6 +44,7 @@ class RDMAMessage {
   }
   RDMAQueues::Status dirSendsTo(int num,int *pids,char *msg,int len);
   bool  tryRecvFrom(int mac,char *buffer);
+    char* getbasePtr();
   
   
 };

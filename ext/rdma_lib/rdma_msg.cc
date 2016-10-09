@@ -81,6 +81,10 @@ bool RDMAMessage::tryRecvFrom(int mac,char *msg) {
     return false;
 }
 
+char* RDMAMessage::getbasePtr()
+{
+      return RDMAMessage::basePtr;
+}
 
 
 
