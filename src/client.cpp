@@ -47,9 +47,11 @@ void Client::run_perftest_tcp(int keysize, int payloadsize)
                 break;
             case 1:
                 op_str = "get";
+                value_str = "";
                 break;
             case 2:
                 op_str = "del";
+                value_str = "";
                 break;
         }
         strcpy(req_str,(op_str+" "+key_str+value_str).c_str());
@@ -81,6 +83,7 @@ void Client::run_rdma()
     netDef.push_back(serverAddr);
 
     uint64_t bufSize = 1024*1024*1024;
+    bufSize *= 4;
     send_buffer = new char[bufSize];
     recv_buffer = new char[bufSize];
 
@@ -91,23 +94,21 @@ void Client::run_rdma()
     RDMAMessage *send_msg = new RDMAMessage(0,2,send_rdma,send_buffer);
     RDMAQueues *recv_rdma = bootstrapRDMA(0,recv_port,netDef,qpPerMac,recv_buffer,bufSize);
     RDMAMessage *recv_msg = new RDMAMessage(0,2,recv_rdma,recv_buffer);
-    fprintf(stdout,"rdma bootstrap done\n");
-    //  RDMAClient *client = new RDMAClient(rdma,buffer);
 
-
-    fprintf(stdout,"done\n");
-    std::cout << "Input request.. "<< std::endl;
+    std::cout << "--------------------------------------------------------------------------------\n"
+              << "Please input request: "<< std::endl;
     char *req_str = new char[bufSize];
     char resp_str[1024] = {0};
     while(1)
     {
+        std::cout << "> ";
         std::cin.getline(req_str, bufSize);
 
         send(send_msg,req_str);
-        //std::cout << "Send "<<req_str<<std::endl;
+        std::cout << "Send "<<req_str<<std::endl;
 
         recv(recv_msg,resp_str,1);
-        //std::cout << "Recv "<<resp_str<<std::endl;
+        std::cout << "Recv "<<resp_str<<std::endl;
 
     }
 
@@ -124,6 +125,7 @@ void Client::run_perftest_rdma(int keysize, int payloadsize)
     netDef.push_back(serverAddr);
 
     uint64_t bufSize = 1024*1024*1024;
+    bufSize *= 4;
     send_buffer = new char[bufSize];
     recv_buffer = new char[bufSize];
 
@@ -139,7 +141,8 @@ void Client::run_perftest_rdma(int keysize, int payloadsize)
 
     auto max =pow(10,keysize);
     std::string sample_str = std::string(payloadsize, 'a');
-    std::cout << "Start perf test.. "<< std::endl;
+    std::cout << "--------------------------------------------------------------------------------\n"
+              << "Start perf test.. "<< std::endl;
     srand(time(NULL));
     auto time_start = gettimestamp();
 
@@ -158,24 +161,30 @@ void Client::run_perftest_rdma(int keysize, int payloadsize)
                 break;
             case 1:
                 op_str = "get";
+                value_str = "";
                 break;
             case 2:
                 op_str = "del";
+                value_str = "";
                 break;
         }
         strcpy(req_str,(op_str+" "+key_str+value_str).c_str());
-
         send(send_msg,req_str);
+        //std::cout << req_str<<std::endl;
 
         recv(recv_msg,resp_str,1);
+        //std::cout << resp_str<<std::endl;
 
         count +=1;
-        std::cout << count<<std::endl;
+        //std::cout << count<<std::endl;
     }
     auto interval = gettimeinterval(time_start,gettimestamp());
     auto qps = test_size/interval;
-    std::cout << "It takes " << interval <<" seconds to finish "<<test_size<<" requests."<<std::endl;
-    std::cout << "The qps is " << qps <<" requests/second."<<std::endl;
+    std::cout << "perf test ended.\n"
+              << "--------------------------------------------------------------------------------\n"
+              << "It takes " << interval <<" seconds to finish "<<test_size<<" requests."<<std::endl
+              << "The qps is " << qps <<" requests/second."<<std::endl
+              << "--------------------------------------------------------------------------------\n";
 
 
 

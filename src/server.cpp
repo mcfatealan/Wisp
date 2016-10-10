@@ -100,6 +100,7 @@ void Server::run_rdma() {
     char *send_buffer,*recv_buffer;
 
     uint64_t bufSize = 1024*1024*1024;
+    bufSize *= 4;
     send_buffer = new char[bufSize];
     recv_buffer = new char[bufSize];
 
@@ -110,23 +111,21 @@ void Server::run_rdma() {
     RDMAMessage *recv_msg = new RDMAMessage(0,2,recv_rdma,recv_buffer);
     RDMAQueues *send_rdma = bootstrapRDMA(1,send_port,netDef,qpPerMac,send_buffer,bufSize);
     RDMAMessage *send_msg = new RDMAMessage(0,2,send_rdma,send_buffer);
-    fprintf(stdout,"rdma bootstrap done\n");
-    //  RDMAClient *client = new RDMAClient(rdma,buffer);
 
-    fprintf(stdout,"done\n");
-
+    std::cout<< "--------------------------------------------------------------------------------\n"
+             << "start solving requests\n";
     char req_str[1024] = {0};
     while (true) {
 
         recv(recv_msg,req_str,0);
         //  Wait for next request from client
-        std::cout << "Recv " << req_str << std::endl;
+        //std::cout << "Recv " << req_str << std::endl;
 
         //  Do some 'work'
         std::string resp_str = execute_request(std::string(req_str));
 
         send(send_msg,resp_str.c_str());
-        std::cout << "Send "<< resp_str << std::endl;
+        //std::cout << "Send "<< resp_str << std::endl;
 
     }
 }

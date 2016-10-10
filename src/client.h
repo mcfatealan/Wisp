@@ -34,11 +34,13 @@ public:
         zmq::message_t request (32);
         memcpy (request.data (), clientAddr.c_str(), 32);
         socket.send (request);
+        std::cout << "Connected, addr info sent.\n"
+                  << "--------------------------------------------------------------------------------\n";
 
     }
     ~Client()
     {
-        std::cout << "finished. "<<std::endl;
+        std::cout << "client exited. "<<std::endl;
     }
 
     void run_tcp();

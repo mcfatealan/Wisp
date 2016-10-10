@@ -4,8 +4,11 @@
 #include "client.h"
 #include "server.h"
 
+void show_title();
 void show_usage();
 int main(int argc, char* argv[]) {
+    show_title();
+
    using namespace GetOpt;
    GetOpt_pp ops(argc, argv);
 
@@ -75,13 +78,34 @@ int main(int argc, char* argv[]) {
    return 0;
 }
 
+void show_title()
+{
+    std::cout << "--------------------------------------------------------------------------------\n"
+              << "> Wisp v0.1.0 \n"
+              << "--------------------------------------------------------------------------------\n";
+}
+
 void show_usage()
 {
     std::cout << "Usage:\n"
-              <<"\t[-h]\t\t\t help\n"
-              <<"\t[-s]\t\t\t run as server\n"
-              <<"\t[-c SERVER_ADDRESS] \t run as client\n"
-              <<"\t[-p SERVER_ADDRESS] [--key_size key_size] [--payload_size payload_size]\n"
-              <<"\t    \t\t\t run as client_perf\n"
-              <<"\t[-t]\t\t\t use tcp instead of rdma\n";
+              << "  [-h]                                                        help\n"
+              << "  [-s]                                                        run as server\n"
+              << "  [-c SERVER_ADDRESS]                                         run as client\n"
+              << "  [-p SERVER_ADDRESS] [--key_size key_size] [--payload_size payload_size]\n"
+              << "                                                              run as client_perf\n"
+              << "  [-t]                                                        use tcp instead of rdma\n"
+              << "--------------------------------------------------------------------------------\n";
+    std::cout << "\n"
+              << "[ Examples ]\n"
+              << "\n"
+              << "< simple cli >\n"
+              << "  server: ./wisp -s                                                        \n"
+              << "  client: ./wisp -c 10.0.0.100                                             \n"
+              << "< simple cli using tcp >\n"
+              << "  server: ./wisp -s -t                                                       \n"
+              << "  client: ./wisp -c 10.0.0.100 -t                                             \n"
+              << "< perf test >\n"
+              << "  server: ./wisp -s                                                        \n"
+              << "  client: ./wisp -p 10.0.0.100 --key_size 3 --payload_size 10               \n"
+              << "--------------------------------------------------------------------------------\n";
 }

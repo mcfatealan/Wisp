@@ -37,13 +37,14 @@ public:
         char clientip[32] = {0};
         memcpy(clientip, request.data(), 32);
         clientAddr = std::string(clientip);
-        std::cout << "recv connection from "<<clientAddr <<std::endl;
+        std::cout << "recv connection from "<<clientAddr <<std::endl
+                  << "--------------------------------------------------------------------------------\n";
 
     }
 
     ~Server()
     {
-        std::cout << "finished. "<<std::endl;
+        std::cout << "server exited. "<<std::endl;
     }
 
     std::string execute_request(std::string request);
